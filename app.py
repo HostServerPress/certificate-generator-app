@@ -38,7 +38,6 @@ def generate_and_zip_pdfs(pdf_file, excel_file, sheet_name, filename_col):
                 if page_num > num_pdf_pages:
                     break
                 
-                # Ensure the filename has a .pdf extension
                 if not filename.lower().endswith('.pdf'):
                     filename += '.pdf'
                 
@@ -47,12 +46,10 @@ def generate_and_zip_pdfs(pdf_file, excel_file, sheet_name, filename_col):
                 pdf_writer = PdfWriter()
                 pdf_writer.add_page(pdf_reader.pages[i])
                 
-                # Save the single-page PDF to an in-memory buffer
                 pdf_output_buffer = io.BytesIO()
                 pdf_writer.write(pdf_output_buffer)
                 pdf_output_buffer.seek(0)
                 
-                # Add the single-page PDF to the zip file
                 zip_f.writestr(filename, pdf_output_buffer.getvalue())
                 
                 progress_bar.progress((i + 1) / len(filenames))
@@ -61,7 +58,7 @@ def generate_and_zip_pdfs(pdf_file, excel_file, sheet_name, filename_col):
         return zip_buffer
 
     except ValueError:
-        st.error(f"Error: Sheet '{sheet_name}' not found in the Excel file. Please check the spelling and case.")
+        st.error(f"Error: Sheet '{sheet_name}' not found in the Excel file. This should not happen with the dropdown selection.")
         return None
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
@@ -71,11 +68,11 @@ def generate_and_zip_pdfs(pdf_file, excel_file, sheet_name, filename_col):
 st.set_page_config(layout="wide")
 st.title("Automated Certificate Generator")
 st.markdown("""
-This tool generates individual PDF certificates from a multi-page PDF master file and an Excel data sheet.
+This tool generates individual PDF certificates from a multi-page master PDF and an Excel data sheet.
 **Workflow:**
-1.  Upload your multi-page certificate master file (as a **PDF**).
+1.  Upload your multi-page certificate master file (saved as a **PDF**).
 2.  Upload your Excel data file.
-3.  Enter the exact sheet name and the column header containing the desired filenames.
+3.  Use the dropdowns to select the correct sheet and filename column.
 4.  Click "Generate Certificates" and download the resulting `.zip` file.
 """)
 
@@ -90,10 +87,39 @@ with col2:
 st.header("2. Configure Settings")
 
 col3, col4 = st.columns(2)
-with col3:
-    sheet_name_input = st.text_input("Enter the EXACT Excel Sheet Name", help="This is case-sensitive. Check the tab name in Excel.")
-with col4:
-    filename_column_input = st.text_input("Enter the Filename Column Header", help="The column in your Excel sheet that contains the PDF filenames.")
+
+# --- START OF THE NEW DYNAMIC DROPDOWN LOGIC ---
+if excel_data_file is not None:
+    try:
+        xls = pd.ExcelFile(excel_data_file)
+        sheet_names = xls.sheet_names
+        
+        with col3:
+            sheet_name_input = st.selectbox("Select the Excel Sheet", sheet_names, help="The app automatically reads the sheet names from your file.")
+        
+        if sheet_name_input:
+            df_sheet = pd.read_excel(excel_data_file, sheet_name=sheet_name_input)
+            column_names = df_sheet.columns.tolist()
+            with col4:
+                filename_column_input = st.selectbox("Select the Filename Column", column_names, help="The app automatically reads the column headers from your selected sheet.")
+        else:
+            with col4:
+                st.selectbox("Select the Filename Column", ["Select a sheet first"], disabled=True)
+                filename_column_input = None
+                
+    except Exception as e:
+        st.error(f"Could not read the Excel file. Please ensure it is a valid .xlsx or .xls file. Error: {e}")
+        sheet_name_input = None
+        filename_column_input = None
+else:
+    # Display disabled dropdowns if no file is uploaded
+    with col3:
+        st.selectbox("Select the Excel Sheet", ["Upload an Excel file first"], disabled=True)
+        sheet_name_input = None
+    with col4:
+        st.selectbox("Select the Filename Column", ["Upload an Excel file first"], disabled=True)
+        filename_column_input = None
+# --- END OF THE NEW DYNAMIC DROPDOWN LOGIC ---
 
 st.header("3. Generate and Download")
 
